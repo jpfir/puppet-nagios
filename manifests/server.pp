@@ -314,12 +314,12 @@ class nagios::server (
     require => Package['nagios'],
   }
   file { '/etc/nagios/nagios.cfg':
-    owner   => 'root',
-    group   => 'root',
-    mode    => '0644',
-    content => template($cfg_template),
-    notify  => Service['nagios'],
-    require => Package['nagios'],
+    owner        => 'root',
+    group        => 'root',
+    mode         => '0644',
+    content      => template($cfg_template),
+    notify       => Service['nagios'],
+    require      => Package['nagios'],
   }
   file { '/etc/nagios/private/resource.cfg':
     owner   => 'root',
@@ -1025,6 +1025,33 @@ class nagios::server (
   nagios_command { 'check_nrpe_elasticsearch_unassigned_shards':
     command_line => "${nrpe} -c check_elasticsearch_unassigned_shards",
   }
+  # Define NRPE command for check_es_system for OpenSearch Tests
+  # NRPE Command Definition for split_brain mode
+  nagios_command { 'check_nrpe_opensearch_split_brain':
+    command_line => "${nrpe} -c check_opensearch_split_brain",
+  }  
+  nagios_command { 'check_nrpe_opensearch_cluster_status':
+    command_line => "${nrpe} -c check_opensearch_cluster_status",
+  }
+  nagios_command { 'check_nrpe_opensearch_disk_usage':
+    command_line => "${nrpe} -c check_opensearch_disk_usage",
+  }
+  nagios_command { 'check_nrpe_opensearch_nodes':
+    command_line => "${nrpe} -c check_opensearch_nodes",
+  }
+  nagios_command { 'check_nrpe_opensearch_unassigned_shards':
+    command_line => "${nrpe} -c check_opensearch_unassigned_shards",
+  }
+  nagios_command { 'check_nrpe_opensearch_jvm_usage':
+    command_line => "${nrpe} -c check_opensearch_jvm_usage",
+  }
+  nagios_command { 'check_nrpe_opensearch_thread_pool_queues':
+    command_line => "${nrpe} -c check_opensearch_thread_pool_queues",
+  }
+  nagios_command { 'check_nrpe_opensearch_no_replica_indices':
+    command_line => "${nrpe} -c check_opensearch_no_replica_indices",
+  }
+ 
   nagios_command { 'check_nrpe_ssd':
     command_line => "${nrpe} -c check_ssd",
   }
@@ -1092,6 +1119,9 @@ class nagios::server (
   }
   nagios_command { 'check_nrpe_ups':
     command_line => "${nrpe} -c check_ups",
+  }
+  nagios_command { 'check_nrpe_uptime':
+    command_line => "${nrpe} -c check_uptime",
   }
   # Collect virtual resources from check_service
   Nagios_command <<| tag == 'service' |>> {
