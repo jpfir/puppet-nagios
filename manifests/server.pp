@@ -317,6 +317,7 @@ class nagios::server (
     owner        => 'root',
     group        => 'root',
     mode         => '0644',
+    validate_cmd => "/usr/sbin/nagios -v %",
     content      => template($cfg_template),
     notify       => Service['nagios'],
     require      => Package['nagios'],
@@ -1026,10 +1027,6 @@ class nagios::server (
     command_line => "${nrpe} -c check_elasticsearch_unassigned_shards",
   }
   # Define NRPE command for check_es_system for OpenSearch Tests
-  # NRPE Command Definition for split_brain mode
-  nagios_command { 'check_nrpe_opensearch_split_brain':
-    command_line => "${nrpe} -c check_opensearch_split_brain",
-  }  
   nagios_command { 'check_nrpe_opensearch_cluster_status':
     command_line => "${nrpe} -c check_opensearch_cluster_status",
   }
@@ -1051,7 +1048,12 @@ class nagios::server (
   nagios_command { 'check_nrpe_opensearch_no_replica_indices':
     command_line => "${nrpe} -c check_opensearch_no_replica_indices",
   }
- 
+  nagios_command { 'check_nrpe_opensearch_node_uptime':
+    command_line => "${nrpe} -c check_opensearch_node_uptime",
+  }
+  nagios_command { 'check_nrpe_opensearch_check_disk_space_for_resharding':
+    command_line => "${nrpe} -c check_opensearch_check_disk_space_for_resharding",
+  }
   nagios_command { 'check_nrpe_ssd':
     command_line => "${nrpe} -c check_ssd",
   }

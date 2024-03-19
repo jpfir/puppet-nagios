@@ -5,6 +5,7 @@ class nagios::check::opensearch (
   Optional[String]         $host                     = '127.0.0.1',
   Optional[String]         $port                     = undef,
   Optional[String]         $node                     = undef,
+  Optional[Integer]        $expected_nodes           = undef,
   Optional[String]         $user                     = 'admin',
   Optional[String]         $pass                     = 'admin',
   Array[String]            $modes_enabled            = [],
@@ -45,8 +46,13 @@ class nagios::check::opensearch (
   } else {
     $arg_pass = ''
   }
+  if $args !~ /-n/ and $expected_nodes != undef {
+    $arg_enodes = "-n ${expected_nodes} "
+  } else {
+    $arg_enodes = ''
+  }
 
-  $globalargs = strip("${arg_h}${arg_p}${arg_n}${arg_u}${arg_pass}${args}")
+  $globalargs = strip("${arg_h}${arg_p}${arg_n}${arg_u}${arg_pass}${arg_enodes}${args}")
 
   # We need jq and bc installed
   $packages = [ 'bc' , 'jq' ]
@@ -65,14 +71,15 @@ class nagios::check::opensearch (
 
   # Define Nagios checks for each mode
   $check_commands = {
-    'cluster_status'   => 'cluster_status',
-    'nodes'   => 'nodes',
-    'unassigned_shards' => 'unassigned_shards',
-    'jvm_usage' => 'jvm_usage',
-    'split_brain' => 'split_brain',
-    'disk_usage' => 'disk_usage',
-    'thread_pool_queues' => 'thread_pool_queues',
-    'no_replica_indices' => 'no_replica_indices',
+    'cluster_status'                  => 'cluster_status',
+    'nodes'                           => 'nodes',
+    'unassigned_shards'               => 'unassigned_shards',
+    'jvm_usage'                       => 'jvm_usage',
+    'disk_usage'                      => 'disk_usage',
+    'thread_pool_queues'              => 'thread_pool_queues',
+    'no_replica_indices'              => 'no_replica_indices',
+    'node_uptime'                     => 'node_uptime',
+    'check_disk_space_for_resharding' => 'check_disk_space_for_resharding',
   }
 
   # Define Nagios checks for each mode
