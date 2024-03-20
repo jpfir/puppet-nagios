@@ -714,7 +714,12 @@ nagios::check::fluentbit::modes_enabled:
   - 'uptime'
 ```
 
-For the memory_usage mode you can also specify warning and critical thresholds:
+For the `memory_usage` mode, warning and critical thresholds can be explicitly specified in megabytes using the `-W` (warning) and `-C` (critical) options.
+If these thresholds are not provided, and the monitored service has a `MemoryMax` configuration set, the script will automatically calculate default thresholds based on this maximum memory limit.
+- The warning threshold will be set at 75% of `MemoryMax`.
+- The critical threshold will be set at 90% of `MemoryMax`.
+
+Here's how to set custom thresholds:
 
 ```yaml
 # Example setting critical and warning for memory_usage

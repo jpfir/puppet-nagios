@@ -12,10 +12,10 @@ MODE=""
 while getopts ":w:W:c:C:s:m:" opt; do
   case ${opt} in
     w | W)
-      WARNING_THRESHOLD=$OPTARG
+      WARNING_THRESHOLD=$(($OPTARG * 1024 * 1024)) # Convert MB to bytes for comparison
       ;;
     c | C)
-      CRITICAL_THRESHOLD=$OPTARG
+      CRITICAL_THRESHOLD=$(($OPTARG * 1024 * 1024)) # Convert MB to bytes for comparison
       ;;
     s )
       SERVICE=$OPTARG
@@ -45,35 +45,45 @@ fi
 
 # Define the function for memory usage check
 check_memory_usage() {
-  MEMORY_USED=$(systemctl show $SERVICE -p MemoryCurrent --value | tr -d '[:alpha:]')
-  if [ "$MEMORY_USED" != "undefined" ] && [ "$MEMORY_USED" != "" ]; then
-    MEMORY_USED_MB=$((MEMORY_USED/1024/1024))
-    
-    # Build the performance data string
-    perf_data="'${SERVICE}_memory_usage_MB'=${MEMORY_USED_MB};${WARNING_THRESHOLD};${CRITICAL_THRESHOLD}"
-    
-    if [ -n "$CRITICAL_THRESHOLD" ] && [ "$MEMORY_USED_MB" -ge "$CRITICAL_THRESHOLD" ]; then
-      echo "CRITICAL: Memory used by $SERVICE: ${MEMORY_USED_MB} MB | $perf_data (Critical threshold: ${CRITICAL_THRESHOLD} MB)"
-      exit 2
-    elif [ -n "$WARNING_THRESHOLD" ] && [ "$MEMORY_USED_MB" -ge "$WARNING_THRESHOLD" ]; then
-      echo "WARNING: Memory used by $SERVICE: ${MEMORY_USED_MB} MB | $perf_data (Warning threshold: ${WARNING_THRESHOLD} MB)"
-      exit 1
-    else
-      # If no thresholds are specified or the usage is below the specified thresholds, report as OK.
-      echo "OK: Memory used by $SERVICE: ${MEMORY_USED_MB} MB | $perf_data"
-      exit 0
-    fi
+  SERVICE_MEM_INFO=$(systemctl show $SERVICE -p MemoryCurrent -p MemoryMax)
+  MEMORY_USED=$(echo "$SERVICE_MEM_INFO" | grep MemoryCurrent | cut -d'=' -f2 | tr -d '[:alpha:]')
+  MEMORY_MAX_STRING=$(echo "$SERVICE_MEM_INFO" | grep MemoryMax | cut -d'=' -f2)
+
+  # Only calculate default thresholds if none are provided
+  if [[ -z "$WARNING_THRESHOLD" && -z "$CRITICAL_THRESHOLD" && "$MEMORY_MAX_STRING" != "infinity" ]]; then
+    MEMORY_MAX=$(echo "$MEMORY_MAX_STRING" | tr -d '[:alpha:]')
+    # Assuming default warning at 75% and critical at 90% of MemoryMax
+    WARNING_THRESHOLD=$((MEMORY_MAX * 75 / 100))
+    CRITICAL_THRESHOLD=$((MEMORY_MAX * 90 / 100))
+  fi
+
+  # Convert MemoryUsed to MB for readability
+  MEMORY_USED_MB=$((MEMORY_USED/1024/1024))
+  # Ensure thresholds are in MB for the output
+  WARNING_THRESHOLD_MB=$((WARNING_THRESHOLD/1024/1024))
+  CRITICAL_THRESHOLD_MB=$((CRITICAL_THRESHOLD/1024/1024))
+
+  perf_data="'${SERVICE}_memory_usage'=${MEMORY_USED_MB}MB;${WARNING_THRESHOLD_MB};${CRITICAL_THRESHOLD_MB}"
+
+  if [[ "$MEMORY_MAX_STRING" == "infinity" || -z "$MEMORY_MAX_STRING" ]]; then
+    echo "OK: Memory used by $SERVICE: ${MEMORY_USED_MB} MB (No MemoryMax set) | $perf_data"
+    exit 0
+  elif [ "$MEMORY_USED" -ge "$CRITICAL_THRESHOLD" ]; then
+    echo "CRITICAL: Memory used by $SERVICE: ${MEMORY_USED_MB} MB | $perf_data"
+    exit 2
+  elif [ "$MEMORY_USED" -ge "$WARNING_THRESHOLD" ]; then
+    echo "WARNING: Memory used by $SERVICE: ${MEMORY_USED_MB} MB | $perf_data"
+    exit 1
   else
-    echo "UNKNOWN: Could not determine memory usage for $SERVICE | $perf_data"
-    exit 3
+    echo "OK: Memory used by $SERVICE: ${MEMORY_USED_MB} MB | $perf_data"
+    exit 0
   fi
 }
-
 
 # Function to check uptime and warn if less than 10 minutes
 check_uptime() {
   UPTIME_TIMESTAMP=$(systemctl show $SERVICE -p ActiveEnterTimestamp --value)
-  
+
   if [ "$UPTIME_TIMESTAMP" != "undefined" ] && [ -n "$UPTIME_TIMESTAMP" ]; then
     # Convert the timestamp to seconds since epoch
     UPTIME_SECONDS=$(date -d "$UPTIME_TIMESTAMP" +%s)
@@ -89,7 +99,7 @@ check_uptime() {
 
     # Format the uptime message
     UPTIME_MSG="${DAYS} days ${HOURS} hours ${MINUTES} minutes"
-    
+
     # Check if uptime is less than 10 minutes for warning
     if [ "$UPTIME_MINUTES" -lt 10 ]; then
       echo "WARNING: ${SERVICE} uptime is less than 10 minutes (${UPTIME_MSG}) | 'uptime_minutes'=${UPTIME_MINUTES}"
