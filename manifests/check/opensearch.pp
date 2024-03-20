@@ -1,23 +1,24 @@
 class nagios::check::opensearch (
   # Absent by default for testing
-  Enum['present','absent'] $ensure                   = 'absent',
-  String                   $args                     = '',
-  Optional[String]         $host                     = '127.0.0.1',
-  Optional[String]         $port                     = undef,
-  Optional[String]         $node                     = undef,
-  Optional[Integer]        $expected_nodes           = undef,
-  Optional[String]         $user                     = 'admin',
-  Optional[String]         $pass                     = 'admin',
-  Array[String]            $modes_enabled            = [],
-  Array[String]            $modes_disabled           = [],
-  Optional[String]         $check_title              = $::nagios::client::host_name,
-  Optional[String]         $check_period             = $::nagios::client::service_check_period,
-  Optional[String]         $contact_groups           = $::nagios::client::service_contact_groups,
-  Optional[String]         $first_notification_delay = $::nagios::client::service_first_notification_delay,
-  Optional[String]         $max_check_attempts       = $::nagios::client::service_max_check_attempts,
-  Optional[String]         $notification_period      = $::nagios::client::service_notification_period,
-  Optional[String]         $use                      = $::nagios::client::service_use,
-  Optional[String]         $servicegroups            = $::nagios::client::service_servicegroups,
+  Enum['present','absent']           $ensure                   = 'present',
+  String                             $args                     = '',
+  Optional[String]                   $host                     = '127.0.0.1',
+  Optional[String]                   $port                     = undef,
+  Optional[String]                   $node                     = undef,
+  Optional[Integer]                  $expected_nodes           = undef,
+  Optional[String]                   $user                     = 'admin',
+  Optional[String]                   $pass                     = 'admin',
+  Array[String]                      $modes_enabled            = [],
+  Array[String]                      $modes_disabled           = [],
+  Optional[Hash[String, String]]     $mode_args                = {},
+  Optional[String]                   $check_title              = $::nagios::client::host_name,
+  Optional[String]                   $check_period             = $::nagios::client::service_check_period,
+  Optional[String]                   $contact_groups           = $::nagios::client::service_contact_groups,
+  Optional[String]                   $first_notification_delay = $::nagios::client::service_first_notification_delay,
+  Optional[String]                   $max_check_attempts       = $::nagios::client::service_max_check_attempts,
+  Optional[String]                   $notification_period      = $::nagios::client::service_notification_period,
+  Optional[String]                   $use                      = $::nagios::client::service_use,
+  Optional[String]                   $servicegroups            = $::nagios::client::service_servicegroups,
 ) {
 
   # Set options from parameters unless already set inside args
@@ -46,8 +47,8 @@ class nagios::check::opensearch (
   } else {
     $arg_pass = ''
   }
-  if $args !~ /-n/ and $expected_nodes != undef {
-    $arg_enodes = "-n ${expected_nodes} "
+  if $args !~ /-E/ and $expected_nodes != undef {
+    $arg_enodes = "-E ${expected_nodes} "
   } else {
     $arg_enodes = ''
   }
@@ -86,10 +87,20 @@ class nagios::check::opensearch (
   # Need to solve the user and password for monitoring
   $check_commands.each |$mode, $command| {
     if !($mode in $modes_disabled) and (empty($modes_enabled) or $mode in $modes_enabled) {
+      # Determine if mode_args is defined and has a key for the current mode
+      $args_mode = $mode_args ? {
+        undef   => '',
+        default => $mode_args[$mode] ? {
+          undef   => '',
+          default => $mode_args[$mode]
+        }
+      }
+      $fullargs = strip("${globalargs} ${args_mode}")
+
       nagios::client::nrpe_file { "check_opensearch_${mode}":
         ensure  => $ensure,
         plugin  => 'opensearch_check_nrpe.sh',
-        args    => "-k $globalargs -t ${command}",
+        args    => "$fullargs -t ${command}",
         require => File['/usr/lib64/nagios/plugins/opensearch_check_nrpe.sh'],
       }
 

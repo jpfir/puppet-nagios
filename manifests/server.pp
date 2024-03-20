@@ -314,13 +314,12 @@ class nagios::server (
     require => Package['nagios'],
   }
   file { '/etc/nagios/nagios.cfg':
-    owner        => 'root',
-    group        => 'root',
-    mode         => '0644',
-    validate_cmd => "/usr/sbin/nagios -v %",
-    content      => template($cfg_template),
-    notify       => Service['nagios'],
-    require      => Package['nagios'],
+    owner   => 'root',
+    group   => 'root',
+    mode    => '0644',
+    content => template($cfg_template),
+    notify  => Service['nagios'],
+    require => Package['nagios'],
   }
   file { '/etc/nagios/private/resource.cfg':
     owner   => 'root',
@@ -1026,7 +1025,6 @@ class nagios::server (
   nagios_command { 'check_nrpe_elasticsearch_unassigned_shards':
     command_line => "${nrpe} -c check_elasticsearch_unassigned_shards",
   }
-  # Define NRPE command for check_es_system for OpenSearch Tests
   nagios_command { 'check_nrpe_opensearch_cluster_status':
     command_line => "${nrpe} -c check_opensearch_cluster_status",
   }
@@ -1053,6 +1051,15 @@ class nagios::server (
   }
   nagios_command { 'check_nrpe_opensearch_check_disk_space_for_resharding':
     command_line => "${nrpe} -c check_opensearch_check_disk_space_for_resharding",
+  }
+  nagios_command { 'check_nrpe_fluentbit_uptime':
+    command_line => "${nrpe} -c check_fluentbit_uptime",
+  }
+  nagios_command { 'check_nrpe_fluentbit_memory_usage':
+    command_line => "${nrpe} -c check_fluentbit_memory_usage",
+  }
+  nagios_command { 'check_nrpe_fluentbit_status':
+    command_line => "${nrpe} -c check_fluentbit_status",
   }
   nagios_command { 'check_nrpe_ssd':
     command_line => "${nrpe} -c check_ssd",
