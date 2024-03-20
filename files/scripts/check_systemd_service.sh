@@ -83,7 +83,7 @@ check_memory_usage() {
 # Function to check uptime and warn if less than 10 minutes
 check_uptime() {
   UPTIME_TIMESTAMP=$(systemctl show $SERVICE -p ActiveEnterTimestamp --value)
-
+  
   if [ "$UPTIME_TIMESTAMP" != "undefined" ] && [ -n "$UPTIME_TIMESTAMP" ]; then
     # Convert the timestamp to seconds since epoch
     UPTIME_SECONDS=$(date -d "$UPTIME_TIMESTAMP" +%s)
@@ -99,7 +99,7 @@ check_uptime() {
 
     # Format the uptime message
     UPTIME_MSG="${DAYS} days ${HOURS} hours ${MINUTES} minutes"
-
+    
     # Check if uptime is less than 10 minutes for warning
     if [ "$UPTIME_MINUTES" -lt 10 ]; then
       echo "WARNING: ${SERVICE} uptime is less than 10 minutes (${UPTIME_MSG}) | 'uptime_minutes'=${UPTIME_MINUTES}"

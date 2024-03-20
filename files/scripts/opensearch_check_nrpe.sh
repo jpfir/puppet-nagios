@@ -41,13 +41,13 @@ print_usage() {
   echo "  -k                            Skip SSL verification. Use with caution."
   echo "  -w <warning_threshold>        Set a warning threshold."
   echo "  -c <critical_threshold>       Set a critical threshold."
-  echo "  -n <expected_node_count>      Specify the expected node count for the 'nodes' check."
+  echo "  -E <expected_node_count>      Specify the expected node count for the 'nodes' check."
   echo "  -N <node>                     Specify the node name. Defaults to the hostname."
   echo "  -h                            Display this help message and exit."
 }
 
 # Parse command-line options
-while getopts ":H:P:u:p:N:n:t:w:c:kh" opt; do
+while getopts ":H:P:u:p:N:E:t:w:W:c:C:kh" opt; do
   case ${opt} in
     H )
       HOST=$OPTARG
@@ -64,7 +64,7 @@ while getopts ":H:P:u:p:N:n:t:w:c:kh" opt; do
     N )
       CURRENT_NODE=$OPTARG
       ;;
-    n)
+    E)
       EXPECTED_NODE_COUNT=$OPTARG
       ;;
     t )
@@ -73,10 +73,10 @@ while getopts ":H:P:u:p:N:n:t:w:c:kh" opt; do
     k )
       SSL_VERIFY=false
       ;;
-    w )
+    w | W)
       WARN_THRESHOLD=$OPTARG
       ;;
-    c )
+    c | C)
       CRIT_THRESHOLD=$OPTARG
       ;;
     h )
@@ -265,18 +265,26 @@ check_node_uptime() {
     exit 3 # UNKNOWN
   fi
 
-  # Convert uptime from milliseconds to minutes
+  # Convert uptime from milliseconds to minutes for performance data
   local uptime_minutes=$((uptime_ms / 60000))
 
-  # Prepare performance data
+  # Convert uptime from milliseconds to human-readable format for message display
+  local days=$((uptime_ms / 86400000))
+  local hours=$(( (uptime_ms % 86400000) / 3600000 ))
+  local minutes_display=$(( (uptime_ms % 3600000) / 60000 ))
+
+  # Prepare uptime string in a human-readable format
+  local uptime_string="${days}d ${hours}h ${minutes_display}m"
+
+  # Prepare performance data including uptime in minutes
   local perf_data="'uptime_minutes'=$uptime_minutes"
 
   # Check if uptime is less than 10 minutes
   if [[ "$uptime_minutes" -lt 10 ]]; then
-    echo "WARNING: OpenSearch node $node_name uptime is less than 10 minutes ($uptime_minutes minutes). | $perf_data"
+    echo "WARNING: OpenSearch node $node_name uptime is less than 10 minutes ($uptime_string). | $perf_data"
     exit 1 # WARNING
   else
-    echo "OK: OpenSearch node $node_name uptime is $uptime_minutes minutes. | $perf_data"
+    echo "OK: OpenSearch node $node_name uptime is $uptime_string. | $perf_data"
     exit 0 # OK
   fi
 }
