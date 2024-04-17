@@ -692,39 +692,27 @@ Available Checks (Modes):
 
 ## Fluent Bit
 
-The Fluent Bit monitoring uses the `check_systemd_service.sh` (placed at `/usr/lib64/nagios/plugins/` by default) to
-monitor various aspects of Fluent Bit service, including status, memory usage, and uptime.
+The Fluent Bit monitoring uses the `/api/v1/health` endpoint to determine the health status of Fluent Bit.
 
-You have the flexibility to customize which checks are active either by disabling specific modes or enabling a select few:
+The health check is performed by a custom script named `check_fluentbit_health.sh`,
+which is located by default at `/usr/lib64/nagios/plugins/`.
+This script checks the health of the Fluent Bit service by accessing the API endpoint `/api/v1/health`,
+which provides health status directly from the Fluent Bit service.
 
-If you prefer to exclude certain checks, specify them in the `modes_disabled` configuration. For example, to disable memory_usage:
+### Configuring Fluent Bit Health Service
 
-```yaml
-# Disable some check (modes)
-nagios::check::fluentbit::modes_disabled:
-  - 'memory_usage'
-```
+To utilize the health check functionality, Fluent Bit must be configured to enable its built-in HTTP server,
+which exposes the `/api/v1/health` endpoint.
 
-Alternatively, you can enable only specific checks by listing them in the `modes_enabled` configuration. This is useful for focusing monitoring on particular areas of interest or concern:
+For more information please check [Health Check for Fluent Bit](https://docs.fluentbit.io/manual/administration/monitoring#health-check-for-fluent-bit)
 
-```yaml
-# Enable only the following checks (modes)
-nagios::check::fluentbit::modes_enabled:
-  - 'status'
-  - 'uptime'
-```
+### Script Configuration
 
-For the `memory_usage` mode, warning and critical thresholds can be explicitly specified in megabytes using the `-W` (warning) and `-C` (critical) options.
-If these thresholds are not provided, and the monitored service has a `MemoryMax` configuration set, the script will automatically calculate default thresholds based on this maximum memory limit.
-- The warning threshold will be set at 75% of `MemoryMax`.
-- The critical threshold will be set at 90% of `MemoryMax`.
-
-Here's how to set custom thresholds:
+By default, localhost and port 2020 are used for the check but you can customize it from hiera:
 
 ```yaml
-# Example setting critical and warning for memory_usage
-nagios::check::fluentbit::mode_args:
-   memory_usage: '-C 90 -W 80'
+# Fluent Bit health check parameters
+nagios::check::fluentbit::args: '-H your-fluentbit-host -p your-port-number'
 ```
 
 ## Kafka

@@ -1052,14 +1052,8 @@ class nagios::server (
   nagios_command { 'check_nrpe_opensearch_check_disk_space_for_resharding':
     command_line => "${nrpe} -c check_opensearch_check_disk_space_for_resharding",
   }
-  nagios_command { 'check_nrpe_fluentbit_uptime':
-    command_line => "${nrpe} -c check_fluentbit_uptime",
-  }
-  nagios_command { 'check_nrpe_fluentbit_memory_usage':
-    command_line => "${nrpe} -c check_fluentbit_memory_usage",
-  }
-  nagios_command { 'check_nrpe_fluentbit_status':
-    command_line => "${nrpe} -c check_fluentbit_status",
+  nagios_command { 'check_nrpe_fluentbit_health':
+    command_line => "${nrpe} -c check_fluentbit_health",
   }
   nagios_command { 'check_nrpe_ssd':
     command_line => "${nrpe} -c check_ssd",
