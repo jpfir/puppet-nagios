@@ -8,7 +8,7 @@ PASSWORD=""
 SSL_VERIFY=true
 WARN_THRESHOLD=""
 CRIT_THRESHOLD=""
-CURRENT_NODE=$(hostname | sed 's/\.net$/.lan/')
+CURRENT_NODE=$(hostname)
 
 # Valid types array
 VALID_TYPES=(cluster_status nodes unassigned_shards jvm_usage disk_usage thread_pool_queues no_replica_indices node_uptime check_disk_space_for_resharding)
@@ -156,6 +156,23 @@ get_cluster_health() {
   
   echo "$response"
 }
+
+# Verify authentication credentials
+verify_credentials() {
+  local url="$OPENSEARCH_URL/_cluster/health"
+  local http_code=$(curl -o /dev/null $CURL_OPTS -s -w "%{http_code}" -u $CREDENTIALS "$url")
+
+  if [[ $http_code -eq 401 ]]; then
+    echo "CRITICAL: Invalid authentication credentials."
+    exit 2 # CRITICAL
+  elif [[ $http_code != 200 ]]; then
+    echo "UNKNOWN: Unable to verify authentication credentials."
+    exit 3 # UNKNOWN
+  fi
+}
+
+# Verify authentication credentials before proceeding
+verify_credentials
 
 # Adjusted function to get nodes stats optionally for a specific node
 get_nodes_stats() {
