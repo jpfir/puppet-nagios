@@ -707,7 +707,6 @@ nagios::check::elasticsearch::args_jvm_usage: '-N 10.0.0.1 -C 90 -W 80'
 nagios::check::elasticsearch::args_nodes: '-E 5' # Expected nodes in cluester
 ```
 
-
 ## OpenSearch
 
 The `opensearch` checks monitor OpenSearch clusters, nodes, and indices using a single
