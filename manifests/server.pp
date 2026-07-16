@@ -572,6 +572,9 @@ class nagios::server (
   nagios_command { 'check_nrpe_disk':
     command_line => "${nrpe} -c check_disk",
   }
+  nagios_command { 'check_nrpe_disk_projection':
+    command_line => "${nrpe} -c check_disk_usage_projection",
+  }
   nagios_command { 'check_nrpe_procs':
     command_line => "${nrpe} -c check_procs",
   }
@@ -942,6 +945,12 @@ class nagios::server (
   }
   nagios_command { 'check_nrpe_mongodb_write_data_files':
     command_line => "${nrpe} -c check_mongodb_write_data_files",
+  }
+  nagios_command { 'check_nrpe_mongodb_tickets':
+    command_line => "${nrpe} -c check_mongodb_tickets",
+  }
+  nagios_command { 'check_nrpe_mongodb_wt_cache':
+    command_line => "${nrpe} -c check_mongodb_wt_cache",
   }
   nagios_command { 'check_nrpe_rabbitmq_connection_count':
     command_line => "${nrpe} -c check_rabbitmq_connection_count",

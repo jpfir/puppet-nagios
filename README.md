@@ -90,8 +90,9 @@ the variables which can be manipulated this way. The following :
 nagios::client::config { 'host_address': value => $facts['networking']['interfaces']['eth2']['ip'] }
 ```
 
-Will result in having `$::nagios_host_name` get `$ipaddress_eth2` as its value
-for the entire configuration of the client where it is applied.
+Will result in having `$::nagios_host_name` get
+`$facts['networking']['interfaces']['eth2']['ip']` as its value for the entire
+configuration of the client where it is applied.
 
 Nagios client check override configuration examples :
 
@@ -105,7 +106,7 @@ can inherit it)  :
 
 ```puppet
 Nagios::Check::Swap { ensure => 'absent' }
-if $::domain == 'example.com' {
+if $facts['networking']['domain'] == 'example.com' {
   Nagios::Check::Cpu { notification_period => 'workhours' }
 }
 ```
@@ -159,13 +160,13 @@ hiera's automatic class parameter lookup) :
 
 ```puppet
 class { '::nagios::client':
-  host_notification_period => $::domain ? {
+  host_notification_period => $facts['networking']['domain'] ? {
     /\.dev$/ => 'workhours',
     default  => '24x7',
   }
   # You will need to use the type "nagios_hostgroup" on the server for
   # all of the possible domain values to create the hostgroups.
-  host_hostgroups => $::domain,
+  host_hostgroups => $facts['networking']['domain'],
 }
 ```
 
@@ -184,6 +185,39 @@ node for the change to be applied : One for the fact to be created, then
 another for the client configuration to take the new fact into account, then
 the server run to update the nagios configuration. This might take a little
 while depending on how often puppet is run on the nodes.
+
+## Disk Usage Projection
+
+Predicts when a filesystem will run out of space based on observed growth.
+It alerts on **hours remaining** rather than a static percentage, providing a
+clear window for intervention.
+
+### Configuration
+
+The check calculates the growth rate using a dual-window average (defaulting to
+the last 12 hours of data) to smooth out temporary spikes.
+
+```yaml
+nagios::check::disk_usage_projection::warning_hours: 24
+nagios::check::disk_usage_projection::critical_hours: 12
+
+```
+
+By default, the script excludes virtual filesystems (`tmpfs`, `devtmpfs`, etc.).
+You can customize the exclusion list or the data storage path via hiera:
+
+```yaml
+nagios::check::disk_usage_projection::args: '--exclude "nfs|fuse" --data-dir "/opt/nagios/state"'
+
+```
+
+### Notes
+
+* **Warm-up:** Requires roughly 12 hours of historical data before it can
+calculate a trend. Until then, it returns a **WARM** status.
+* **State:** Historical data is stored in `/var/tmp/disk_usage_data` and pruned
+automatically after 7 days.
+* **Dependencies:** Requires `bc` and `awk`, which are managed by Puppet.
 
 ## MySQL
 
@@ -315,14 +349,29 @@ The `mongodb` checks are very similar to the `mysql_health` ones. The single
 They may be enabled and disabled individually, or in groups of relevant
 checks, for instance all replication checks at once.
 
+### Modern MongoDB (WiredTiger 3.2+)
+
+For modern MongoDB versions using the WiredTiger engine, new checks replace
+the obsolete lock and memory checks:
+
+* **`tickets`**: Checks available read/write concurrency tickets. Alerting here
+predicts database stalls before they happen (replaces `lock`).
+* **`wt_cache`**: Checks "Dirty Byte" % in cache. High values (>20%) indicate
+disk I/O cannot keep up (replaces `memory_mapped`).
+
+These are automatically enabled for MongoDB 3.2+, replacing the legacy checks.
+
+### Configuration
+
 You will need to create the monitoring user and set the information :
 
 ```yaml
 nagios::check::mongodb::user: 'nagios'
 nagios::check::mongodb::pass: 'mysupersecretpassword'
-```
 
 ```
+
+```javascript
 db.createUser(
   {
     user: "nagios",
@@ -336,12 +385,14 @@ db.createUser(
       ]
    }
 )
+
 ```
 
 You can completely disable MongoDB monitoring for some nodes :
 
 ```yaml
 nagios::check::mongodb::ensure: 'absent'
+
 ```
 
 You can selectively disable some :
@@ -352,6 +403,7 @@ nagios::check::mongodb::modes_disabled:
   - 'oplog'
   - 'queries_per_second'
   - 'queues'
+
 ```
 
 Or selectively enable some :
@@ -361,6 +413,7 @@ Or selectively enable some :
 nagios::check::mongodb::modes_enabled:
   - 'connect'
   - 'page_faults'
+
 ```
 
 Or disable entire groups of non-relevant checks :
@@ -371,16 +424,20 @@ nagios::check::mongodb::mmapv1: false
 nagios::check::mongodb::v2: false
 nagios::check::mongodb::replication: false
 nagios::check::mongodb::sharding: false
+
 ```
 
 For an arbiter, you can disable all non-relevant checks :
 
 ```yaml
 nagios::check::mongodb::arbiter: true
+
 ```
 
 Then for each mode, you can also pass some arguments, typically to change the
-warning and critical values as needed :
+warning and critical values as needed.
+
+**Note on Oplog:** The `oplog` check defaults to **1h Warning / 15m Critical**.
 
 ```yaml
 # Tweak some check values
@@ -389,6 +446,12 @@ nagios::check::mongodb::args_connections: '-W 70 -C 80'
 nagios::check::mongodb::args_memory: '-W 8 -C 16'
 nagios::check::mongodb::args_opcounters: '-W 10000 -C 50000'
 nagios::check::mongodb::args_replication_lag: '-W 15 -C 30'
+
+# Modern WiredTiger Checks (Defaults shown)
+nagios::check::mongodb::args_tickets: '-W 80 -C 95'   # % tickets used
+nagios::check::mongodb::args_wt_cache: '-W 5 -C 20'   # % dirty cache
+nagios::check::mongodb::args_oplog: '-W 1.0 -C 0.25'  # Oplog window in hours
+
 ```
 
 For more info please refer to the `nagios-plugin-mongodb` documentation :
