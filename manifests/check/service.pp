@@ -8,13 +8,45 @@ define nagios::check::service (
   $max_check_attempts       = $::nagios::client::service_max_check_attempts,
   $notification_period      = $::nagios::client::service_notification_period,
   $use                      = $::nagios::client::service_use,
+  $systemd_user             = undef,
 ) {
 
-  ensure_resource('nagios::client::nrpe_plugin', 'check_service', {'ensure' => $ensure})
+  ensure_resource(
+    'nagios::client::nrpe_plugin',
+    'check_service',
+    {'ensure' => $ensure},
+  )
 
-  $nrpe_command   = $::nagios::params::nrpe_command
-  $nrpe_options   = $::nagios::params::nrpe_options
-  $nrpe           = "${nrpe_command} ${nrpe_options}"
+  $nrpe_command = $::nagios::params::nrpe_command
+  $nrpe_options = $::nagios::params::nrpe_options
+  $nrpe         = "${nrpe_command} ${nrpe_options}"
+
+  $service_args = $systemd_user ? {
+    undef   => "-s ${title}",
+    default => "-s ${title} -U ${systemd_user}",
+  }
+
+  if $systemd_user {
+    # Install the helper used to connect directly to the target user's
+    # systemd --user manager.
+    ensure_resource(
+      'nagios::client::nrpe_plugin',
+      'check_systemd_user_service',
+      {'ensure' => $ensure},
+    )
+
+    # Use nrpe_plugin's existing sudoers support to grant only the exact
+    # service check to NRPE, running as the target systemd user.
+    #
+    # plugin_template => false makes this a sudoers-only resource; the
+    # actual helper is installed once above.
+    nagios::client::nrpe_plugin { "systemd_user_service_${title}":
+      ensure          => $ensure,
+      plugin_template => false,
+      sudo_user       => $systemd_user,
+      sudo_cmd        => "${::nagios::client::plugin_dir}/check_systemd_user_service ${title}",
+    }
+  }
 
   @@nagios_command { "check_nrpe_service_${title}_${facts['networking']['fqdn']}":
     command_line => "${nrpe} -c check_service_${title}",
@@ -23,7 +55,7 @@ define nagios::check::service (
 
   nagios::client::nrpe_file { "check_service_${title}":
     ensure => $ensure,
-    args   => "-s ${title}",
+    args   => $service_args,
     plugin => 'check_service',
   }
 

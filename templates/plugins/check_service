@@ -5,6 +5,7 @@
 # 2015-03-09 [Pascal Hegy] - Change USER variable to USERNAME to avoid the use and confusion with the USER env variable
 # 2017-08-30 [Roberto Leibman] - Reordered checks to make sure dead and inactive get checked first
 # 2018-04-25 [Robin Gierse] - Update check via systemctl for Linux with grep to produce better output for systemctl
+# 2026-08-10 [Juan Pablo Firrincieli] - Add systemd --user service checks via -U
 
 ########
 # Examples:
@@ -18,6 +19,9 @@
 # 3.) Manually select service management tool and service
 # $ ./check_service.sh -o linux -t "service rsyslog status"
 
+# 4.) Check a systemd user service on a linux machine
+# $ ./check_service.sh -o linux -s service-api -U user1
+
 # Nagios Exit Codes
 OK=0
 WARNING=1
@@ -29,6 +33,8 @@ UNKNOWN=3
 # output from the service management tool.
 TRUST_EXIT_CODE=0
 
+PLUGIN_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
 usage()
 {
 cat <<EOF
@@ -39,7 +45,8 @@ Check status of system services for Linux, FreeBSD, OSX, and AIX.
         -s <service>    Specify service name
         -l              List services
         -o <os>         OS type, "linux/osx/freebsd/aix"
-        -u <user>       User if you need to ``sudo -u'' for launchctl (def: nagios, linux and osx only)
+        -u <user>       User if you need to ``sudo -u'' (def: nagios, linux and osx only)
+        -U <user>       Check a systemd --user service for this user (Linux/systemd only)
         -t <tool>       Manually specify service management tool (def: autodetect) with status and service
                         e.g. ``-t "service nagios status"''
 
@@ -57,7 +64,7 @@ fi
 
 os_check() {
 if [ "$OS" == null ]; then
-	unamestr=$(uname)
+        unamestr=$(uname)
         if [[ $unamestr == 'Linux' ]]; then
                 OS='linux'
         elif [[ $unamestr == 'FreeBSD' ]]; then
@@ -71,53 +78,82 @@ if [ "$OS" == null ]; then
 fi
 }
 
-
-
 determine_service_tool() {
-if [[ $OS == linux ]]; then
+    if [[ $OS == linux ]]; then
         if command -v systemctl >/dev/null 2>&1; then
-                SERVICETOOL="systemctl is-active $SERVICE"
-                LISTTOOL="systemctl"
-                if [ $USER_NAME ]; then
-                    SERVICETOOL="sudo -u $USER_NAME systemctl status $SERVICE"
-                    LISTTOOL="sudo -u $USER_NAME systemctl"
+            SERVICETOOL="systemctl is-active $SERVICE"
+            LISTTOOL="systemctl"
+
+            if [ "$SYSTEMD_USER" ]; then
+                if ! id "$SYSTEMD_USER" >/dev/null 2>&1; then
+                    echo "Unknown systemd user: $SYSTEMD_USER"
+                    exit $UNKNOWN
                 fi
-		TRUST_EXIT_CODE=1
+
+                SERVICETOOL="sudo -n -u $SYSTEMD_USER $PLUGIN_DIR/check_systemd_user_service $SERVICE"
+
+            elif [ "$USER_NAME" ]; then
+                SERVICETOOL="sudo -u $USER_NAME systemctl status $SERVICE"
+                LISTTOOL="sudo -u $USER_NAME systemctl"
+            fi
+
+            TRUST_EXIT_CODE=1
+
         elif command -v service >/dev/null 2>&1; then
                 SERVICETOOL="service $SERVICE status"
                 LISTTOOL="service --status-all"
-                if [ $USER_NAME ]; then
+
+                if [ "$SYSTEMD_USER" ]; then
+                    echo "Option \`\`-U'' requires systemd"
+                    exit $UNKNOWN
+                elif [ "$USER_NAME" ]; then
                     SERVICETOOL="sudo -u $USER_NAME service $SERVICE status"
                     LISTTOOL="sudo -u $USER_NAME service --status-all"
                 fi
+
         elif command -v initctl >/dev/null 2>&1; then
                 SERVICETOOL="status $SERVICE"
                 LISTTOOL="initctl list"
-                if [ $USER_NAME ]; then
+
+                if [ "$SYSTEMD_USER" ]; then
+                    echo "Option \`\`-U'' requires systemd"
+                    exit $UNKNOWN
+                elif [ "$USER_NAME" ]; then
                     SERVICETOOL="sudo -u $USER_NAME status $SERVICE"
                     LISTTOOL="sudo -u $USER_NAME initctl list"
                 fi
+
         elif command -v chkconfig >/dev/null 2>&1; then
                 SERVICETOOL=chkconfig
                 LISTTOOL="chkconfig --list"
-                if [ $USER_NAME ]; then
+
+                if [ "$SYSTEMD_USER" ]; then
+                    echo "Option \`\`-U'' requires systemd"
+                    exit $UNKNOWN
+                elif [ "$USER_NAME" ]; then
                     SERVICETOOL="sudo -u $USER_NAME chkconfig"
                     LISTTOOL="sudo -u $USER_NAME chkconfig --list"
                 fi
+
         elif [ -f /etc/init.d/$SERVICE ] || [ -d /etc/init.d ]; then
                 SERVICETOOL="/etc/init.d/$SERVICE status | tail -1"
                 LISTTOOL="ls -1 /etc/init.d/"
-                if [ $USER_NAME ]; then
+
+                if [ "$SYSTEMD_USER" ]; then
+                    echo "Option \`\`-U'' requires systemd"
+                    exit $UNKNOWN
+                elif [ "$USER_NAME" ]; then
                     SERVICETOOL="sudo -u $USER_NAME /etc/init.d/$SERVICE status | tail -1"
                     LISTTOOL="sudo -u $USER_NAME ls -1 /etc/init.d/"
                 fi
+
         else
                 echo "Unable to determine the system's service tool!"
                 exit 1
         fi
-fi
+    fi
 
-if [[ $OS == freebsd ]]; then
+    if [[ $OS == freebsd ]]; then
         if command -v service >/dev/null 2>&1; then
                 SERVICETOOL="service $SERVICE status"
                 LISTTOOL="service -l"
@@ -128,34 +164,40 @@ if [[ $OS == freebsd ]]; then
                 echo "Unable to determine the system's service tool!"
                 exit 1
         fi
-fi
+    fi
 
-if [[ $OS == osx ]]; then
-        if [ -f /usr/sbin/serveradmin >/dev/null 2>&1 ] && serveradmin list | grep "$SERVICE" 2>&1 >/dev/null; then
+    if [[ $OS == osx ]]; then
+        if [ -f /usr/sbin/serveradmin >/dev/null 2>&1 ] && \
+           serveradmin list | grep "$SERVICE" 2>&1 >/dev/null; then
                 SERVICETOOL="serveradmin status $SERVICE"
                 LISTTOOL="serveradmin list"
+
         elif [ -f /Applications/Server.app/Contents/ServerRoot/usr/sbin/serveradmin >/dev/null 2>&1 ] && \
-               /Applications/Server.app/Contents/ServerRoot/usr/sbin/serveradmin list | \
-                grep "$SERVICE" 2>&1 >/dev/null; then
+             /Applications/Server.app/Contents/ServerRoot/usr/sbin/serveradmin list | \
+             grep "$SERVICE" 2>&1 >/dev/null; then
                 SERVICETOOL="/Applications/Server.app/Contents/ServerRoot/usr/sbin/serveradmin status $SERVICE"
                 LISTTOOL="/Applications/Server.app/Contents/ServerRoot/usr/sbin/serveradmin list"
+
         elif command -v launchctl >/dev/null 2>&1; then
                 SERVICETOOL="launchctl list | grep -v ^- | grep $SERVICE || echo $SERVICE not running! "
                 LISTTOOL="launchctl list"
-                if [ $USER_NAME ]; then
+
+                if [ "$USER_NAME" ]; then
                         SERVICETOOL="sudo -u $USER_NAME launchctl list | grep -v ^- | grep $SERVICE || echo $SERVICE not running! "
                         LISTTOOL="sudo -u $USER_NAME launchctl list"
                 fi
+
         elif command -v service >/dev/null 2>&1; then
                 SERVICETOOL="service --test-if-configured-on $SERVICE"
                 LISTTOOL="service list"
+
         else
                 echo "Unable to determine the system's service tool!"
                 exit 1
         fi
-fi
+    fi
 
-if [[ $OS == aix ]]; then
+    if [[ $OS == aix ]]; then
         if command -v lssrc >/dev/null 2>&1; then
                 SERVICETOOL="lssrc -s $SERVICE | grep -v Subsystem"
                 LISTTOOL="lssrc -a"
@@ -163,7 +205,7 @@ if [[ $OS == aix ]]; then
                 echo "Unable to determine the system's service tool!"
                 exit 1
         fi
-fi
+    fi
 }
 
 ARGC=$#
@@ -174,10 +216,11 @@ SERVICETOOL=null
 LISTTOOL=null
 SERVICE=".*"
 #USER_NAME=nagios
+SYSTEMD_USER=""
 
 argcheck 1
 
-while getopts "hls:o:t:u:" OPTION
+while getopts "hls:o:t:u:U:" OPTION
 do
      case $OPTION in
          h)
@@ -211,6 +254,9 @@ do
          u)
              USER_NAME="$OPTARG"
              ;;
+         U)
+             SYSTEMD_USER="$OPTARG"
+             ;;
          \?)
              exit 1
              ;;
@@ -218,6 +264,16 @@ do
 done
 
 os_check
+
+if [ "$USER_NAME" ] && [ "$SYSTEMD_USER" ]; then
+    echo "Options conflict: ``-u'' and ``-U''"
+    exit $UNKNOWN
+fi
+
+if [ "$SYSTEMD_USER" ] && [ "$OS" != "linux" ]; then
+    echo "Option ``-U'' is only supported on Linux/systemd"
+    exit $UNKNOWN
+fi
 
 if [ $MANUAL -eq 1 ]; then
 SERVICETOOL=$MANUALSERVICETOOL
@@ -327,13 +383,12 @@ case $STATUS_MSG in
         exit $OK
         ;;
 "")
-	echo "$SERVICE is not running: no output from service command"
-	exit $CRITICAL
-	;;
+        echo "$SERVICE is not running: no output from service command"
+        exit $CRITICAL
+        ;;
 *)
         echo "Unknown status: $STATUS_MSG"
         echo "Is there a typo in the command or service configuration?: $STATUS_MSG"
         exit $UNKNOWN
         ;;
 esac
-
