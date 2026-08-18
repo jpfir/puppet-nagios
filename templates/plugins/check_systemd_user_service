@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+
+# Helper for checking a service in the current user's systemd --user manager.
+# Intended to be executed via sudo as that user.
+
+if [ "$#" -ne 1 ]; then
+    echo "Usage: $0 <service>"
+    exit 3
+fi
+
+SERVICE="$1"
+
+export XDG_RUNTIME_DIR="/run/user/$(id -u)"
+
+exec /usr/bin/systemctl --user is-active "$SERVICE"

@@ -800,13 +800,26 @@ nagios::check::consul::token: 'foo'
 ```
 
 ## Services
+
 Check status of system services for Linux, FreeBSD, OSX, and AIX.
 
 Add the following on the client manifest:
 
 ```puppet
-   nagios::check::service { 'foo_service': }
+nagios::check::service { 'foo_service': }
 ```
+
+For services managed by a user's `systemd --user` instance, specify the user
+with `systemd_user`:
+
+```puppet
+nagios::check::service { 'foo_service':
+  systemd_user => 'foo',
+}
+```
+
+This checks the service in the specified user's systemd user manager and is
+useful for rootless services such as Podman Quadlets.
 
 ## Syncthing
 
