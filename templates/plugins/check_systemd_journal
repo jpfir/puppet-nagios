@@ -1,0 +1,40 @@
+#!/usr/bin/env bash
+
+# Helper for checking a systemd --user unit's recent journal against an
+# extended-regex pattern, for services that can stay "active" while doing
+# no useful work (e.g. a queue consumer whose GPU/model backend broke).
+# Intended to be executed via sudo as the target user - invoked by
+# check_service's -J/-U handling the same way -U alone invokes
+# check_systemd_user_service.
+#
+# Usage: check_systemd_journal <unit> <lookback> <pattern>
+
+OK=0
+CRITICAL=2
+UNKNOWN=3
+
+if [ "$#" -ne 3 ]; then
+    echo "Usage: $0 <unit> <lookback> <pattern>"
+    exit $UNKNOWN
+fi
+
+UNIT="$1"
+LOOKBACK="$2"
+PATTERN="$3"
+
+export XDG_RUNTIME_DIR="/run/user/$(id -u)"
+
+OUTPUT=$(journalctl --user -u "$UNIT" --since "-${LOOKBACK}" --no-pager 2>&1)
+if [ $? -ne 0 ]; then
+    echo "UNKNOWN - journalctl failed for $UNIT"
+    exit $UNKNOWN
+fi
+
+MATCHES=$(printf '%s\n' "$OUTPUT" | grep -E "$PATTERN")
+if [ -n "$MATCHES" ]; then
+    echo "CRITICAL - pattern matched in $UNIT journal (last $LOOKBACK): $(printf '%s\n' "$MATCHES" | tail -1)"
+    exit $CRITICAL
+fi
+
+echo "OK - no pattern match in $UNIT journal (last $LOOKBACK)"
+exit $OK

@@ -821,6 +821,30 @@ nagios::check::service { 'foo_service':
 This checks the service in the specified user's systemd user manager and is
 useful for rootless services such as Podman Quadlets.
 
+For a service that can stay "active" while doing no useful work (e.g. a
+queue consumer whose backend broke), add an independent check against its
+recent journal with `journal_pattern` (requires `systemd_user`):
+
+```puppet
+nagios::check::service { 'foo_service':
+  systemd_user     => 'foo',
+  journal_pattern  => 'OutOfMemory|panic|no kernel image is available',
+  journal_lookback => '10min',
+}
+```
+
+This creates a second, separately-alertable Nagios service
+(`service_foo_service_journal`) that greps the unit's recent
+`journalctl --user` output for the given extended regex and reports
+CRITICAL on any match, alongside the classic active-state check above.
+`journal_lookback` defaults to `10min`.
+
+Note: in the sudoers grant this generates, spaces in the pattern are
+backslash-escaped rather than quoted (a sudoers `Cmnd_Spec` quirk, not a
+shell) - this is handled automatically by the module and only matters if
+you ever need to hand-inspect or hand-edit the generated
+`/etc/sudoers.d/nagios_systemd_journal_*` file.
+
 ## Syncthing
 
 Check the Syncthing status via de API
