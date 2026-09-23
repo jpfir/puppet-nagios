@@ -75,30 +75,34 @@ define nagios::check::service (
   }
 
   if $journal_pattern {
-    if !$systemd_user {
-      fail("nagios::check::service{'${title}'}: journal_pattern requires systemd_user")
-    }
-
     ensure_resource(
       'nagios::client::nrpe_plugin',
       'check_systemd_journal',
       {'ensure' => $ensure},
     )
 
-    # Sudoers `Cmnd_Spec` ignores shell quoting, so literal spaces must be
-    # backslash-escaped (`word\ with\ spaces`).
-    $journal_pattern_sudoers_safe = regsubst($journal_pattern, ' ', '\ ', 'G')
+    if $systemd_user {
+      # Impersonate `$systemd_user` to run `check_systemd_journal` via a narrow
+      # sudoers grant.
+      # Note: Sudoers `Cmnd_Spec` ignores shell quoting, so literal spaces must
+      # be backslash-escaped (`word\ with\ spaces`) to match at runtime; standard
+      # quotes pass `visudo` but silently fail.
+      $journal_pattern_sudoers_safe = regsubst($journal_pattern, ' ', '\ ', 'G')
 
-    nagios::client::nrpe_plugin { "systemd_journal_${title}":
-      ensure          => $ensure,
-      plugin_template => false,
-      sudo_user       => $systemd_user,
-      sudo_cmd        => "${::nagios::client::plugin_dir}/check_systemd_journal ${title} ${journal_lookback} ${journal_pattern_sudoers_safe}",
+      nagios::client::nrpe_plugin { "systemd_journal_${title}":
+        ensure          => $ensure,
+        plugin_template => false,
+        sudo_user       => $systemd_user,
+        sudo_cmd        => "${::nagios::client::plugin_dir}/check_systemd_journal user ${title} ${journal_lookback} ${journal_pattern_sudoers_safe}",
+      }
+
+      # Unlike sudo_cmd above, this DOES go through a real shell so
+      # normal double-quote grouping is correct and unchanged here.
+      $journal_args = "-s ${title} -U ${systemd_user} -J \"${journal_pattern}\" -L ${journal_lookback}"
+    } else {
+      # Plain system-wide unit: no user to impersonate, so no sudoers grant at all
+      $journal_args = "-s ${title} -J \"${journal_pattern}\" -L ${journal_lookback}"
     }
-
-    # Unlike sudo_cmd above, this does go through a real shell
-    # so normal double-quote grouping is correct and unchanged here.
-    $journal_args = "-s ${title} -U ${systemd_user} -J \"${journal_pattern}\" -L ${journal_lookback}"
 
     @@nagios_command { "check_nrpe_service_${title}_journal_${facts['networking']['fqdn']}":
       command_line => "${nrpe} -c check_service_${title}_journal",

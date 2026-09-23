@@ -25,6 +25,9 @@
 #
 # 5.) Check a systemd user service's journal for a failure pattern
 # $ ./check_service.sh -o linux -s service-api -U user1 -J "OutOfMemory|panic" -L 15min
+#
+# 6.) Check a plain system-wide service's journal for a failure pattern
+# $ ./check_service.sh -o linux -s some-daemon -J "OutOfMemory|panic" -L 15min
 
 # Nagios Exit Codes
 OK=0
@@ -52,7 +55,8 @@ Check status of system services for Linux, FreeBSD, OSX, and AIX.
         -u <user>       User if you need to ``sudo -u'' (def: nagios, linux and osx only)
         -U <user>       Check a systemd --user service for this user (Linux/systemd only)
         -J <pattern>    Check the unit's recent journal for an extended-regex pattern instead of its
-                        active state (requires -U); CRITICAL on any match
+                        active state; CRITICAL on any match. Combine with -U for a systemd --user
+                        unit, or use alone for a plain system-wide unit (Linux/systemd only)
         -L <window>     journalctl --since window for -J (def: 10min)
         -t <tool>       Manually specify service management tool (def: autodetect) with status and service
                         e.g. ``-t "service nagios status"''
@@ -97,7 +101,10 @@ determine_service_tool() {
                     exit $UNKNOWN
                 fi
 
-                SERVICETOOL="sudo -n -u $SYSTEMD_USER $PLUGIN_DIR/check_systemd_journal $SERVICE $JOURNAL_LOOKBACK \"$JOURNAL_PATTERN\""
+                SERVICETOOL="sudo -n -u $SYSTEMD_USER $PLUGIN_DIR/check_systemd_journal user $SERVICE $JOURNAL_LOOKBACK \"$JOURNAL_PATTERN\""
+
+            elif [ "$JOURNAL_PATTERN" ]; then
+                SERVICETOOL="$PLUGIN_DIR/check_systemd_journal system $SERVICE $JOURNAL_LOOKBACK \"$JOURNAL_PATTERN\""
 
             elif [ "$SYSTEMD_USER" ]; then
                 if ! id "$SYSTEMD_USER" >/dev/null 2>&1; then

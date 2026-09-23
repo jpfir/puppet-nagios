@@ -1,30 +1,48 @@
 #!/usr/bin/env bash
 
-# Helper for checking a systemd --user unit's recent journal against an
-# extended-regex pattern, for services that can stay "active" while doing
-# no useful work (e.g. a queue consumer whose GPU/model backend broke).
-# Intended to be executed via sudo as the target user - invoked by
-# check_service's -J/-U handling the same way -U alone invokes
-# check_systemd_user_service.
+# Helper for checking a systemd unit's recent journal against an extended-
+# regex pattern, for services that can stay "active" while doing no useful
+# work (e.g. a queue consumer whose GPU/model backend broke).
 #
-# Usage: check_systemd_journal <unit> <lookback> <pattern>
+# Two modes:
+#   user   - a systemd --user unit; must be run as (or sudo'd into) the
+#            owning user, same as check_systemd_user_service's -U path.
+#   system - a plain system-wide unit; runs journalctl directly as the
+#            invoking user (no sudo/impersonation), and therefore requires
+#            that user to have system-journal read access (root, or
+#            membership in the systemd-journal/adm group - see README).
+#
+# Usage: check_systemd_journal <user|system> <unit> <lookback> <pattern>
 
 OK=0
 CRITICAL=2
 UNKNOWN=3
 
-if [ "$#" -ne 3 ]; then
-    echo "Usage: $0 <unit> <lookback> <pattern>"
+if [ "$#" -ne 4 ]; then
+    echo "Usage: $0 <user|system> <unit> <lookback> <pattern>"
     exit $UNKNOWN
 fi
 
-UNIT="$1"
-LOOKBACK="$2"
-PATTERN="$3"
+MODE="$1"
+UNIT="$2"
+LOOKBACK="$3"
+PATTERN="$4"
 
-export XDG_RUNTIME_DIR="/run/user/$(id -u)"
+case "$MODE" in
+    user)
+        export XDG_RUNTIME_DIR="/run/user/$(id -u)"
+        JOURNAL_FLAGS="--user"
+        ;;
+    system)
+        JOURNAL_FLAGS=""
+        ;;
+    *)
+        echo "Unknown mode '$MODE' (expected 'user' or 'system')"
+        exit $UNKNOWN
+        ;;
+esac
 
-OUTPUT=$(journalctl --user -u "$UNIT" --since "-${LOOKBACK}" --no-pager 2>&1)
+OUTPUT=$(journalctl $JOURNAL_FLAGS -u "$UNIT" --since "-${LOOKBACK}" --no-pager 2>&1)
 if [ $? -ne 0 ]; then
     echo "UNKNOWN - journalctl failed for $UNIT"
     exit $UNKNOWN
